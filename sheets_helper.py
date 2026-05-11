@@ -49,70 +49,93 @@ def get_worksheet(tab_name):
     return worksheet
 
 
-def update_or_append_columns(worksheet, report_df):
+def update_or_append_columns_incremental(worksheet, report_df):
     """
-    Smart upsert: write report_df to the worksheet.
-
-    report_df: DataFrame where index = metric names, columns = period labels (week or date strings)
-
-    Logic:
-    - Row 1 = headers: ["Metric", period1, period2, ...]
-    - Column A = metric labels
-    - For periods already in the sheet: overwrite that column
-    - For new periods: append as new column(s) to the right
+    Incremental update:
+    - Update existing columns
+    - Append new columns
+    - Không rewrite toàn bộ sheet
     """
+
     metric_labels = report_df.index.tolist()
     new_periods = report_df.columns.tolist()
 
-    # Read existing headers from row 1
+    # 1. Read header
     existing_data = worksheet.get_all_values()
 
-    if not existing_data or not existing_data[0]:
-        # Sheet is empty — write everything fresh
-        existing_periods = []
-    else:
-        existing_periods = existing_data[0][1:]  # skip "Metric" in A1
+    if not existing_data:
+        # Sheet empty → write full
+        header = ["Metric"] + new_periods
+        rows = [header]
 
-    # Build the full ordered list of period columns
-    all_periods = list(existing_periods)
-    for p in new_periods:
-        if p not in all_periods:
-            all_periods.append(p)
-    all_periods.sort()
+        for label in metric_labels:
+            row = [label] + [
+                round(float(report_df.loc[label, p]), 2)
+                if p in report_df.columns else ""
+                for p in new_periods
+            ]
+            rows.append(row)
 
-    # Build the full grid
-    num_rows = len(metric_labels) + 1  # +1 for header
-    num_cols = len(all_periods) + 1     # +1 for metric label column
+        worksheet.update(rows)
+        return
 
-    # Header row
-    header = ["Metric"] + all_periods
+    header = existing_data[0]
+    existing_periods = header[1:]
 
-    # Data rows
-    rows = [header]
-    for i, label in enumerate(metric_labels):
-        row = [label]
-        for period in all_periods:
-            if period in new_periods:
-                val = report_df.loc[label, period]
-                # Format number
-                try:
-                    val = round(float(val), 2)
-                except (ValueError, TypeError):
-                    val = 0
-            elif existing_data and i + 1 < len(existing_data):
-                # Preserve existing data for periods we're not updating
-                period_idx = existing_periods.index(period) + 1 if period in existing_periods else None
-                if period_idx is not None and period_idx < len(existing_data[i + 1]):
-                    val = existing_data[i + 1][period_idx]
-                else:
-                    val = ""
-            else:
-                val = ""
-            row.append(val)
-        rows.append(row)
+    # 2. Map period → column index
+    period_to_col = {
+        p: idx + 2  # +1 for 1-based, +1 for skipping Metric col
+        for idx, p in enumerate(existing_periods)
+    }
 
-    # Write all at once (batch update for performance)
-    worksheet.clear()
-    worksheet.update(rows, f"A1:{gspread.utils.rowcol_to_a1(num_rows, num_cols)}")
+    # 3. Ensure metric rows match
+    existing_metrics = [row[0] for row in existing_data[1:]]
 
-    print(f"  ✅ Updated {len(new_periods)} period(s) in sheet. Total columns: {len(all_periods)}")
+    if existing_metrics != metric_labels:
+        raise ValueError("Metric rows mismatch. Avoid incremental update.")
+
+    # 4. Prepare batch updates
+    updates = []
+
+    for period in new_periods:
+        col_values = []
+
+        for label in metric_labels:
+            val = report_df.loc[label, period]
+            try:
+                val = round(float(val), 2)
+            except:
+                val = 0
+            col_values.append([val])  # column format
+
+        if period in period_to_col:
+            # 🔄 Update existing column
+            col_idx = period_to_col[period]
+
+            range_ = f"{gspread.utils.rowcol_to_a1(2, col_idx)}:{gspread.utils.rowcol_to_a1(len(metric_labels)+1, col_idx)}"
+
+            updates.append({
+                "range": range_,
+                "values": col_values
+            })
+
+        else:
+            # ➕ Append new column
+            new_col_idx = len(existing_periods) + 2
+            existing_periods.append(period)
+
+            # update header
+            worksheet.update_cell(1, new_col_idx, period)
+
+            range_ = f"{gspread.utils.rowcol_to_a1(2, new_col_idx)}:{gspread.utils.rowcol_to_a1(len(metric_labels)+1, new_col_idx)}"
+
+            updates.append({
+                "range": range_,
+                "values": col_values
+            })
+
+    # 5. Batch update (1 API call)
+    if updates:
+        worksheet.batch_update(updates)
+
+    print(f"✅ Incremental update done: {len(new_periods)} periods")
