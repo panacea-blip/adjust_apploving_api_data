@@ -12,7 +12,7 @@ from api_fetchers import (
     fetch_adjust, fetch_max_impressions,
     aggregate_max_impressions_daily, build_report_table,
 )
-from sheets_helper import get_worksheet, update_or_append_columns
+from sheets_helper import get_worksheet, update_or_append_columns_incremental
 
 # =========================
 # CONFIG
@@ -61,7 +61,7 @@ def main():
     # 3. Push to Google Sheets
     print(f"\n  Pushing to Google Sheets tab '{SHEET_TAB}'...")
     ws = get_worksheet(SHEET_TAB)
-    update_or_append_columns(ws, report)
+    update_or_append_columns_incremental(ws, report)
 
     print("  Done!")
 
