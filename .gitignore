@@ -1,0 +1,5 @@
+.venv/*
+credentials.json
+test_*.py
+discover_*.py
+__pycache__/
