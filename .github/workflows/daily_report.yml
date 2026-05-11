@@ -1,0 +1,39 @@
+name: Daily Report Pipeline
+
+on:
+  schedule:
+    # 8:00 AM UTC+7 = 1:00 AM UTC
+    - cron: '0 1 * * *'
+  workflow_dispatch:  # manual trigger for testing
+
+jobs:
+  run-reports:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run Weekly Report
+        env:
+          ADJUST_API_TOKEN: ${{ secrets.ADJUST_API_TOKEN }}
+          ADJUST_APP_TOKEN: ${{ secrets.ADJUST_APP_TOKEN }}
+          MAX_API_KEY: ${{ secrets.MAX_API_KEY }}
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+        run: python weekly_report.py
+
+      - name: Run Daily Report
+        env:
+          ADJUST_API_TOKEN: ${{ secrets.ADJUST_API_TOKEN }}
+          ADJUST_APP_TOKEN: ${{ secrets.ADJUST_APP_TOKEN }}
+          MAX_API_KEY: ${{ secrets.MAX_API_KEY }}
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+        run: python daily_report.py
