@@ -37,16 +37,21 @@ def get_client():
 
 
 def get_worksheet(tab_name):
-    """Get or create a worksheet tab in the spreadsheet."""
     client = get_client()
     spreadsheet = client.open_by_key(SPREADSHEET_ID)
 
-    try:
-        worksheet = spreadsheet.worksheet(tab_name)
-    except gspread.exceptions.WorksheetNotFound:
-        worksheet = spreadsheet.add_worksheet(title=tab_name, rows=100, cols=50)
+    tab_name = tab_name.strip()
 
-    return worksheet
+    sheets = [ws.title for ws in spreadsheet.worksheets()]
+    print("Available sheets:", sheets)
+
+    if tab_name not in sheets:
+        raise ValueError(
+            f"Worksheet '{tab_name}' not found or not accessible. "
+            f"Make sure service account has access."
+        )
+
+    return spreadsheet.worksheet(tab_name)
 
 
 def update_or_append_columns_incremental(worksheet, report_df):
