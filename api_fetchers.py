@@ -213,7 +213,7 @@ def fetch_max_revenue_by_network(date_from, date_to):
         "api_key": MAX_API_KEY,
         "start": date_from,
         "end": date_to,
-        "columns": "day,network_name,revenue",
+        "columns": "day,network,estimated_revenue",
         "format": "csv",
     }
 
