@@ -197,22 +197,37 @@ def aggregate_max_impressions_daily(df):
 # =========================
 def fetch_max_revenue_by_network(date_from, date_to):
     """
-    Fetch daily revenue by ad network from AppLovin MAX Revenue Reporting API.
-    Uses the /report endpoint, which supports revenue metrics broken down by
-    network_name dimension.
+    Fetch daily revenue by ad network from AppLovin MAX Report API.
+    Uses the same /maxReport endpoint as impressions, with network dimension.
+    Returns DataFrame with columns: day, network, revenue
 
-    Returns DataFrame with columns: day, network_name, revenue
+    The /maxReport API has a 45-day lookback limit. This function clamps
+    the start date to only request within the available window.
 
     API reference: https://support.applovin.com/en/max/reporting-apis/revenue-reporting-api
     """
     from datetime import datetime, timedelta
 
-    url = "https://r.applovin.com/report"
+    today = datetime.today()
+    cutoff = today - timedelta(days=44)  # 45-day lookback inclusive end
+
+    end_dt = datetime.strptime(date_to, "%Y-%m-%d")
+    start_dt = max(
+        datetime.strptime(date_from, "%Y-%m-%d"),
+        cutoff,
+    )
+
+    if start_dt > end_dt:
+        print(f"  MAX revenue: requested range {date_from}..{date_to} "
+              f"is outside the 45-day lookback window. Returning empty.")
+        return pd.DataFrame()
+
+    url = "https://r.applovin.com/maxReport"
 
     params = {
         "api_key": MAX_API_KEY,
-        "start": date_from,
-        "end": date_to,
+        "start": start_dt.strftime("%Y-%m-%d"),
+        "end": end_dt.strftime("%Y-%m-%d"),
         "columns": "day,network,estimated_revenue",
         "format": "csv",
     }
@@ -222,14 +237,14 @@ def fetch_max_revenue_by_network(date_from, date_to):
     df = pd.read_csv(pd.io.common.StringIO(res.text))
     df.columns = df.columns.str.lower().str.strip()
 
-    if "day" not in df.columns or "network_name" not in df.columns:
+    if "day" not in df.columns or "network" not in df.columns:
         print("MAX Revenue API error. Response:", res.text[:200])
         return pd.DataFrame()
 
-    df["revenue"] = pd.to_numeric(df["revenue"], errors="coerce").fillna(0.0)
+    df["estimated_revenue"] = pd.to_numeric(df["estimated_revenue"], errors="coerce").fillna(0.0)
 
     # Rename network_name → network for consistency with downstream code
-    df.rename(columns={"network_name": "network"}, inplace=True)
+    df.rename(columns={"estimated_revenue": "revenue"}, inplace=True)
 
     return df
 
