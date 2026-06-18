@@ -37,3 +37,11 @@ jobs:
           MAX_API_KEY: ${{ secrets.MAX_API_KEY }}
           GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
         run: python daily_report.py
+
+      - name: Run Revenue by Ad Network Report
+        env:
+          ADJUST_API_TOKEN: ${{ secrets.ADJUST_API_TOKEN }}
+          ADJUST_APP_TOKEN: ${{ secrets.ADJUST_APP_TOKEN }}
+          MAX_API_KEY: ${{ secrets.MAX_API_KEY }}
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+        run: python revenue_by_an.py
