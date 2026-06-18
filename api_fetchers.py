@@ -197,38 +197,23 @@ def aggregate_max_impressions_daily(df):
 # =========================
 def fetch_max_revenue_by_network(date_from, date_to):
     """
-    Fetch daily revenue by ad network from AppLovin MAX Report API.
-    Uses the same /maxReport endpoint as impressions, with network dimension.
-    Returns DataFrame with columns: day, network, revenue
+    Fetch daily revenue by ad network from AppLovin MAX Revenue Reporting API.
+    Uses the /report endpoint, which supports revenue metrics broken down by
+    network_name dimension.
 
-    The /maxReport API has a 45-day lookback limit. This function clamps
-    the start date to only request within the available window.
+    Returns DataFrame with columns: day, network_name, revenue
 
     API reference: https://support.applovin.com/en/max/reporting-apis/revenue-reporting-api
     """
     from datetime import datetime, timedelta
 
-    today = datetime.today()
-    cutoff = today - timedelta(days=44)  # 45-day lookback inclusive end
-
-    end_dt = datetime.strptime(date_to, "%Y-%m-%d")
-    start_dt = max(
-        datetime.strptime(date_from, "%Y-%m-%d"),
-        cutoff,
-    )
-
-    if start_dt > end_dt:
-        print(f"  MAX revenue: requested range {date_from}..{date_to} "
-              f"is outside the 45-day lookback window. Returning empty.")
-        return pd.DataFrame()
-
-    url = "https://r.applovin.com/maxReport"
+    url = "https://r.applovin.com/report"
 
     params = {
         "api_key": MAX_API_KEY,
-        "start": start_dt.strftime("%Y-%m-%d"),
-        "end": end_dt.strftime("%Y-%m-%d"),
-        "columns": "day,network,revenue",
+        "start": date_from,
+        "end": date_to,
+        "columns": "day,network_name,revenue",
         "format": "csv",
     }
 
@@ -237,11 +222,15 @@ def fetch_max_revenue_by_network(date_from, date_to):
     df = pd.read_csv(pd.io.common.StringIO(res.text))
     df.columns = df.columns.str.lower().str.strip()
 
-    if "day" not in df.columns or "network" not in df.columns:
+    if "day" not in df.columns or "network_name" not in df.columns:
         print("MAX Revenue API error. Response:", res.text[:200])
         return pd.DataFrame()
 
     df["revenue"] = pd.to_numeric(df["revenue"], errors="coerce").fillna(0.0)
+
+    # Rename network_name → network for consistency with downstream code
+    df.rename(columns={"network_name": "network"}, inplace=True)
+
     return df
 
 
