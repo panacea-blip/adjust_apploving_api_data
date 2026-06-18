@@ -17,7 +17,7 @@ from sheets_helper import get_worksheet, update_pivot_table
 # CONFIG
 # =========================
 SHEET_TAB = "Revenue Daily by AN"
-FIRST_RUN_START = "2026-04-06"
+FIRST_RUN_START = "2026-06-01"
 
 
 def get_date_range():
