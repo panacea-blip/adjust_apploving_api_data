@@ -97,54 +97,51 @@ def fetch_max_impressions(date_from, date_to):
     Fetch impressions by ad_format from AppLovin MAX Report API.
     Returns daily-level data with columns: day, ad_format, impressions
 
-    Splits the date range into 45-day windows to respect the API's
-    45-day lookback limit.
+    The API has a 45-day lookback limit (rejects dates older than 45 days).
+    We clamp the requested range to the last 45 days so that the call
+    always succeeds. Periods outside this window get 0 impressions via
+    the downstream aggregation functions.
     """
-    # Split into 45-day chunks to avoid API lookback limit
     from datetime import datetime, timedelta
 
-    start = datetime.strptime(date_from, "%Y-%m-%d")
-    end = datetime.strptime(date_to, "%Y-%m-%d")
+    today = datetime.today()
+    cutoff = today - timedelta(days=44)  # 45-day lookback inclusive end
 
-    chunks = []
-    chunk_start = start
-    while chunk_start <= end:
-        chunk_end = min(chunk_start + timedelta(days=44), end)
-        chunks.append((
-            chunk_start.strftime("%Y-%m-%d"),
-            chunk_end.strftime("%Y-%m-%d"),
-        ))
-        chunk_start = chunk_end + timedelta(days=1)
+    # Parse requested end
+    end_dt = datetime.strptime(date_to, "%Y-%m-%d")
+    # Effective start = max(requested start, 45-day cutoff)
+    start_dt = max(
+        datetime.strptime(date_from, "%Y-%m-%d"),
+        cutoff,
+    )
 
-    all_dfs = []
-    url = "https://r.applovin.com/maxReport"
-
-    for cs, ce in chunks:
-        params = {
-            "api_key": MAX_API_KEY,
-            "start": cs,
-            "end": ce,
-            "columns": "day,ad_format,impressions",
-            "format": "csv",
-        }
-
-        res = requests.get(url, params=params)
-
-        df = pd.read_csv(pd.io.common.StringIO(res.text))
-        df.columns = df.columns.str.lower().str.strip()
-
-        if "day" not in df.columns or "ad_format" not in df.columns:
-            print(f"Max Report API error for {cs}..{ce}. Response:", res.text[:200])
-            continue
-
-        df["impressions"] = pd.to_numeric(df["impressions"], errors="coerce").fillna(0).astype(int)
-        all_dfs.append(df)
-
-    if not all_dfs:
+    if start_dt > end_dt:
+        # Entire requested range is outside the lookback window
+        print(f"  MAX impressions: requested range {date_from}..{date_to} "
+              f"is outside the 45-day lookback window. Returning empty.")
         return pd.DataFrame()
 
-    result = pd.concat(all_dfs, ignore_index=True)
-    return result
+    url = "https://r.applovin.com/maxReport"
+
+    params = {
+        "api_key": MAX_API_KEY,
+        "start": start_dt.strftime("%Y-%m-%d"),
+        "end": end_dt.strftime("%Y-%m-%d"),
+        "columns": "day,ad_format,impressions",
+        "format": "csv",
+    }
+
+    res = requests.get(url, params=params)
+
+    df = pd.read_csv(pd.io.common.StringIO(res.text))
+    df.columns = df.columns.str.lower().str.strip()
+
+    if "day" not in df.columns or "ad_format" not in df.columns:
+        print("Max Report API error. Response:", res.text[:200])
+        return pd.DataFrame()
+
+    df["impressions"] = pd.to_numeric(df["impressions"], errors="coerce").fillna(0).astype(int)
+    return df
 
 
 def aggregate_max_impressions_weekly(df):
