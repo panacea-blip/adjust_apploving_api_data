@@ -93,11 +93,25 @@ def update_or_append_columns_incremental(worksheet, report_df):
         for idx, p in enumerate(existing_periods)
     }
 
-    # 3. Ensure metric rows match
+    # 3. Check metric rows — if mismatched, rewrite the whole sheet
     existing_metrics = [row[0] for row in existing_data[1:]]
 
     if existing_metrics != metric_labels:
-        raise ValueError("Metric rows mismatch. Avoid incremental update.")
+        print("  Metric rows mismatch detected. Rewriting entire sheet...")
+        header = ["Metric"] + new_periods
+        rows = [header]
+
+        for label in metric_labels:
+            row = [label] + [
+                round(float(report_df.loc[label, p]), 2)
+                if p in report_df.columns else ""
+                for p in new_periods
+            ]
+            rows.append(row)
+
+        worksheet.clear()
+        worksheet.update(rows)
+        return
 
     # 4. Prepare batch updates
     updates = []
